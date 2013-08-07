@@ -1,0 +1,9 @@
+dist
+cabal-dev
+*.o
+*.hi
+*.ji
+*.js_hi
+*.chi
+*.chs.h
+.virthualenv
