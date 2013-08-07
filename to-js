@@ -1,0 +1,4 @@
+#!/bin/bash
+
+ghcjs -o regex-post RegexPost.lhs
+

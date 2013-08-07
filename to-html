@@ -1,0 +1,4 @@
+#!/bin/bash
+
+pandoc --from=markdown+lhs --to=html5+lhs --output=RegexPost.html --smart RegexPost.lhs
+
