@@ -8,7 +8,6 @@ it so I can see it better.
 <style>
 details { background: hsl(240, 0%, 90%); padding: 10px; display: block; }
 summary { display: block; font-weight: bold; }
-svg { border: 1px solid black; }
 </style>
 
 The other day, I helped [Jeremy](http://www.twitter.com/clioweb) work through a
@@ -43,7 +42,8 @@ will do while trying to match against some text. And what better way to
 understand a system like this than to build a toy example and play with the
 output. That's what we'll do in today's (rather long---sorry---post).
 
-# Literate Programming
+Literate Programming
+====================
 
 To make this a real interactive page, this will be a [literate
 programming](http://en.wikipedia.org/wiki/Literate_programming) post. The page
@@ -61,10 +61,13 @@ your own features or play with it further.
 <details><summary>Haskell Header</summary>
 
 > module Main where
+> 
+> import qualified Data.Map as M
 
 <div></div></details>
 
-# The Data Model
+The Data Model
+==============
 
 The first thing we need to do is create the data types for representing the
 regular expression abstractly. Everything in regular expressions boils down to
@@ -90,7 +93,19 @@ it moves to another node. If a node is marked as a valid stop position, that's
 cool: the input matched. If there's no transition for the current input, then
 the match fails.
 
-**TODO**: `data` for the state machine.
+> type NodeId     = Int
+> type NodeEdges  = M.Map Char NodeId
+> type NodeIndex  = M.Map NodeId RegExNode
+> data RegExNode  = RENode
+>                 { nodeId    :: NodeId
+>                 , isStart   :: Bool
+>                 , isStop    :: Bool
+>                 , nodeEdges :: NodeEdges
+>                 } deriving (Show)
+> data RegExState = REState
+>                 { startNode :: NodeId
+>                 , nodeIndex :: NodeIndex
+>                 }
 
 In practice, there are more things than the four we listed above, but those are
 implementation details for performance. In theory, character classes and other
@@ -138,19 +153,24 @@ match.
 </g>
 </svg>
 
-We start at the green circle and finish at the red one. At each stage (node),
-we accept one character of input and move through any out-bound line (edge)
-that is labeled with that character. If we end up in the red circle, we can
-stop. If there's no out-bound lines labelled with the current character and
-we're not in a red circle, then the regular expression fails on that input.
+We start at the green circle and finish at a red one. At each stage (node), we
+take one character of input and move through any out-bound line (edge) that is
+labeled with that character. If we end up in a red circle and we've consumed as
+much inputas we can, we can stop. If there's no out-bound lines labelled with
+the current character and we're not in a red circle, then the regular
+expression fails on that input.
 
-# Creating the State Machine
+Creating the State Machine
+==========================
 
-# Matching
+Matching
+========
 
-# The Parser
+The Parser
+==========
 
-# The Sandbox
+The Sandbox
+===========
 
 > main :: IO ()
 > main = putStrLn "howdy!"

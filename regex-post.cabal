@@ -18,6 +18,7 @@ executable regex-post
   main-is:             RegexPost.lhs
   -- other-modules:       
   build-depends:       base ==4.6.*
+                     , containers
 
 test-suite regex-post-specs
   type:                exitcode-stdio-1.0
