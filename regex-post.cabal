@@ -19,6 +19,7 @@ executable regex-post
   -- other-modules:       
   build-depends:       base ==4.6.*
                      , containers
+                     , text
 
 test-suite regex-post-specs
   type:                exitcode-stdio-1.0

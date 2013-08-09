@@ -44,7 +44,9 @@ output. That's what we'll do in today's (rather long---sorry---post).
 
 A couple of warnings: this isn't a rigorous description of regular expressions
 in any sense. It's not theoretically rigorous; it's not practically rigorous
-for performance or any other metric. It's supposed to be low-level enough to
+for performance or any other metric. This also isn't a great way to implement
+these in Haskell. That would be another interesting exercise, but not the one I
+have planned for today. Instead, this is supposed to be low-level enough to
 teach the underlying concepts of regular expressions, but with a little added
 sugar to make it easier to understand.
 
@@ -66,10 +68,14 @@ your own features or play with it further.
 
 <details><summary>Haskell Header</summary>
 
+> {-# LANGUAGE OverloadedStrings #-}
+>
 > module Main where
 >
 > import qualified Data.List as L
 > import qualified Data.Map as M
+> import           Data.Text
+> import qualified Data.Text as T
 
 <div></div></details>
 
@@ -104,19 +110,19 @@ it moves to another node. If a node is marked as a valid stop position, that's
 cool: the input matched. If there's no transition for the current input, then
 the match fails.
 
-> type NodeId     = Int
-> type NodeEdges  = M.Map Char NodeId
-> type NodeIndex  = M.Map NodeId RegExNode
-> data RegExNode  = ReNode
->                 { nodeId    :: NodeId
->                 , isStart   :: Bool
->                 , isStop    :: Bool
->                 , nodeEdges :: NodeEdges
->                 } deriving (Show)
-> data RegExState = ReState
->                 { startNode :: NodeId
->                 , nodeIndex :: NodeIndex
->                 }
+> type NodeId       = Int
+> type NodeEdges    = M.Map Char NodeId
+> type NodeIndex    = M.Map NodeId RegExNode
+> data RegExNode    = ReNode
+>                   { nodeId    :: NodeId
+>                   , isStart   :: Bool
+>                   , isStop    :: Bool
+>                   , nodeEdges :: NodeEdges
+>                   } deriving (Show)
+> data RegExPattern = RePattern
+>                   { startNode :: NodeId
+>                   , nodeIndex :: NodeIndex
+>                   }
 
 In practice, there are more things than the four we listed above, but those are
 implementation details for performance. In theory, character classes and other
@@ -196,7 +202,7 @@ This is the alternative of all the literals in the set or, if none of them
 match, the failure regex.
 
 > charClass :: [Char] -> RegEx
-> charClass chars = L.foldl' (flip ReAlt) ReFail $ map ReLiteral chars
+> charClass chars = L.foldl' (flip ReAlt) ReFail $ L.map ReLiteral chars
 
 Based on the last definition, we can create some pre-defined character classes:
 
@@ -237,10 +243,14 @@ represented by this PERL-style regex, `\d+\.\d{2}`.
 Creating the State Machine
 ==========================
 
-
+> compile :: RegEx -> RegExPattern
+> compile = undefined
 
 Matching
 ========
+
+> match :: RegExPattern -> T.Text -> Bool
+> match = undefined
 
 The Parser
 ==========
