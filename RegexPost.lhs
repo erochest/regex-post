@@ -220,8 +220,8 @@ is the concatenation of the input regex and it with a star.
 > more1 regex = regex .+. star regex
 
 *Character classes* are groups of characters, any one of which could match.
-This is the alternative of all the literals in the set or, if none of them
-match, the failure regex.
+This creates a tree of alternatives. It tries each of the characters in the
+list and, if none of them matches, failes.
 
 > charClass :: [Char] -> RegEx
 > charClass chars = L.foldr ReAlt ReFail (L.map re chars)
