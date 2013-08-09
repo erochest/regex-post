@@ -220,7 +220,7 @@ This is the alternative of all the literals in the set or, if none of them
 match, the failure regex.
 
 > charClass :: [Char] -> RegEx
-> charClass chars = L.foldr ReAlt ReFail $ L.map re chars
+> charClass chars = L.foldr ReAlt ReFail (L.map re chars)
 
 Based on the last definition, we can create some pre-defined character classes:
 
