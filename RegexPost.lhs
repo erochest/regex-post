@@ -72,7 +72,7 @@ your own features or play with it further.
 
 > {-# LANGUAGE OverloadedStrings #-}
 >
-> module Main where
+> module RegexPost where
 >
 > import qualified Data.List as L
 > import qualified Data.Map  as M
@@ -101,7 +101,7 @@ several primitives.
 >     | ReConcat RegEx RegEx
 >     | ReAlt RegEx RegEx
 >     | ReStar RegEx
->     deriving (Show)
+>     deriving (Show, Eq)
 
 We can make several of these read a little more naturally, more like the
 language we usually use for regular expressions.
@@ -111,6 +111,9 @@ language we usually use for regular expressions.
 >
 > (.|.) :: RegEx -> RegEx -> RegEx
 > (.|.) = ReAlt
+>
+> infixr 3 .+.
+> infixr 2 .|.
 >
 > star :: RegEx -> RegEx
 > star = ReStar
@@ -196,8 +199,6 @@ expression fails on that input.
 Composing Regular Expressions
 =============================
 
-**TODO: specs for these.**
-
 In fact, let's see how to compose some of these primitives now.
 
 We've already seen that the Kleene star specifies zero or more of the previous
@@ -247,13 +248,13 @@ expressions. For example, here's the regular expression represented by the
 state machine above, `ab|cd*`.
 
 > eg0 :: RegEx
-> eg0 = (re 'a' .+. re 'b') .|. (re 'c' .+. star (re 'd'))
+> eg0 = re 'a' .+. re 'b' .|. re 'c' .+. star (re 'd')
 
 Here's a more complicated example. It would be the regular expression
 represented by this PERL-style regex, `\d+\.\d{2}`.
 
 > eg1 :: RegEx
-> eg1 = (more1 digit) .+. (re '.') .+. digit .+. digit
+> eg1 = more1 digit .+. re '.' .+. digit .+. digit
 
 Creating the State Machine
 ==========================
