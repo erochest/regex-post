@@ -243,9 +243,8 @@ Based on the last definition, we can create some pre-defined character classes:
 > alphaNumeric :: RegEx
 > alphaNumeric = charClass (['0'..'9'] ++ ['a'..'z'] ++ ['A'..'Z'])
 
-We can combine these with the `RegEx` constructors to create regular
-expressions. For example, here's the regular expression represented by the
-state machine above, `ab|cd*`.
+We can combine these to create more complex regular expressions. For example,
+here's the regular expression represented by the state machine above, `ab|cd*`.
 
 > eg0 :: RegEx
 > eg0 = re 'a' .+. re 'b' .|. re 'c' .+. star (re 'd')
