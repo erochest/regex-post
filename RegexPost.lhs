@@ -45,10 +45,12 @@ output. That's what we'll do in today's (rather long---sorry---post).
 A couple of warnings: this isn't a rigorous description of regular expressions
 in any sense. It's not theoretically rigorous; it's not practically rigorous
 for performance or any other metric. This also isn't a great way to implement
-these in Haskell. That would be another interesting exercise, but not the one I
-have planned for today. Instead, this is supposed to be low-level enough to
-teach the underlying concepts of regular expressions, but with a little added
-sugar to make it easier to understand.
+these in Haskell. That would be another interesting exercise (and if there's a
+branch on Github for this repository called *haskelly* or something, you know
+I've gone down that rabbit hole), but not the one I have planned for today.
+Instead, this is supposed to be low-level enough to teach the underlying
+concepts of regular expressions, but with a little added sugar to make it
+easier to understand.
 
 Literate Programming
 ====================
@@ -73,8 +75,7 @@ your own features or play with it further.
 > module Main where
 >
 > import qualified Data.List as L
-> import qualified Data.Map as M
-> import           Data.Text
+> import qualified Data.Map  as M
 > import qualified Data.Text as T
 
 <div></div></details>
@@ -101,6 +102,27 @@ several primitives.
 >     | ReAlt RegEx RegEx
 >     | ReStar RegEx
 >     deriving (Show)
+
+We can make several of these read a little more naturally, more like the
+language we usually use for regular expressions.
+
+> refail :: RegEx
+> refail = ReFail
+>
+> empty :: RegEx
+> empty = ReEmpty
+>
+> (.+.) :: RegEx -> RegEx -> RegEx
+> (.+.) = ReConcat
+>
+> (.|.) :: RegEx -> RegEx -> RegEx
+> (.|.) = ReAlt
+>
+> star :: RegEx -> RegEx
+> star = ReStar
+>
+> re :: Char -> RegEx
+> re = ReLiteral
 
 These primitives are combined together into a [state
 machine](http://en.wikipedia.org/wiki/State_machine). A state machine is just a
@@ -188,21 +210,21 @@ element. There are other quantifiers for other numbers.
 *Zero or one* element: This is often represented with a question mark (*?*).
 This is either the regular expression or the empty regex.
 
-> optional :: RegEx -> RegEx
-> optional re = ReAlt re ReEmpty
+> opt :: RegEx -> RegEx
+> opt regex = regex .|. empty
 
 *One or more* elements: This is often represented with a plus sign (*+*). This
 is the concatenation of the input regex and it with a star.
 
 > more1 :: RegEx -> RegEx
-> more1 re = ReConcat re (ReStar re)
+> more1 regex = regex .+. star regex
 
 *Character classes* are groups of characters, any one of which could match.
 This is the alternative of all the literals in the set or, if none of them
 match, the failure regex.
 
 > charClass :: [Char] -> RegEx
-> charClass chars = L.foldl' (flip ReAlt) ReFail $ L.map ReLiteral chars
+> charClass chars = L.foldl' (flip ReAlt) refail $ L.map re chars
 
 Based on the last definition, we can create some pre-defined character classes:
 
@@ -229,16 +251,13 @@ expressions. For example, here's the regular expression represented by the
 state machine above, `ab|cd*`.
 
 > eg0 :: RegEx
-> eg0 = ReAlt (ReConcat (ReLiteral 'a') (ReLiteral 'b'))
->             (ReConcat (ReLiteral 'c') (ReStar (ReLiteral 'd')))
+> eg0 = (re 'a' .+. re 'b') .|. (re 'c' .+. star (re 'd'))
 
 Here's a more complicated example. It would be the regular expression
 represented by this PERL-style regex, `\d+\.\d{2}`.
 
 > eg1 :: RegEx
-> eg1 = ReConcat (more1 digit)
->                (ReConcat (ReLiteral '.')
->                          (ReConcat digit digit))
+> eg1 = (more1 digit) .+. (re '.') .+. digit .+. digit
 
 Creating the State Machine
 ==========================
