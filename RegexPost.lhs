@@ -132,20 +132,6 @@ it moves to another node. If a node is marked as a valid stop position, that's
 cool: the input matched. If there's no transition for the current input, then
 the match fails.
 
-> type NodeId       = Int
-> type NodeEdges    = M.Map Char NodeId
-> type NodeIndex    = M.Map NodeId RegExNode
-> data RegExNode    = ReNode
->                   { nodeId    :: NodeId
->                   , isStart   :: Bool
->                   , isStop    :: Bool
->                   , nodeEdges :: NodeEdges
->                   } deriving (Show)
-> data RegExPattern = RePattern
->                   { startNode :: NodeId
->                   , nodeIndex :: NodeIndex
->                   }
-
 In practice, there are more things than the four we listed above, but those are
 implementation details for performance. In theory, character classes and other
 things are build by combining those four things with transitions in the state
@@ -198,6 +184,29 @@ labeled with that character. If we end up in a red circle and we've consumed as
 much inputas we can, we can stop. If there's no out-bound lines labelled with
 the current character and we're not in a red circle, then the regular
 expression fails on that input.
+
+We'll implement this state machine in a way that closely follows the diagram.
+Each `RegExNode` knows whether it's a starting or ending node, and each has a
+mapping from characters to more nodes. The entire pattern, and the graph, is
+stored in a mapping from node ID to node.
+
+> type NodeId       = Int
+> type NodeEdges    = M.Map Char NodeId
+> type NodeIndex    = M.Map NodeId RegExNode
+> data RegExNode    = ReNode
+>                   { nodeId    :: NodeId
+>                   , isStart   :: Bool
+>                   , isStop    :: Bool
+>                   , nodeEdges :: NodeEdges
+>                   } deriving (Show)
+> data RegExPattern = RePattern
+>                   { startNode :: NodeId
+>                   , nodeIndex :: NodeIndex
+>                   }
+
+The regular expression stored in `RegEx` data structures will be compiled into
+a `RegExPattern` state machine. These are the structures that will actually be
+used to match input strings against the regular expression.
 
 Composing Regular Expressions
 -----------------------------
