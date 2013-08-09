@@ -1,3 +1,6 @@
+% Regular Expressions from the Ground Up
+% Eric Rochester
+%
 
 <!--
 TODO: add polyfill for <details> http://denis-sokolov.github.io/details-tag/
@@ -53,7 +56,7 @@ concepts of regular expressions, but with a little added sugar to make it
 easier to understand.
 
 Literate Programming
-====================
+--------------------
 
 To make this a real interactive page, this will be a [literate
 programming](http://en.wikipedia.org/wiki/Literate_programming) post. The page
@@ -81,7 +84,7 @@ your own features or play with it further.
 <div></div></details>
 
 The Data Model
-==============
+--------------
 
 The first thing we need to do is create the data types for representing the
 regular expression abstractly. Everything in regular expressions boils down to
@@ -197,7 +200,7 @@ the current character and we're not in a red circle, then the regular
 expression fails on that input.
 
 Composing Regular Expressions
-=============================
+-----------------------------
 
 In fact, let's see how to compose some of these primitives now.
 
@@ -256,22 +259,22 @@ represented by this PERL-style regex, `\d+\.\d{2}`.
 > eg1 = more1 digit .+. re '.' .+. digit .+. digit
 
 Creating the State Machine
-==========================
+--------------------------
 
 > compile :: RegEx -> RegExPattern
 > compile = undefined
 
 Matching
-========
+--------
 
 > match :: RegExPattern -> T.Text -> Bool
 > match = undefined
 
 The Parser
-==========
+----------
 
 The Sandbox
-===========
+-----------
 
 > main :: IO ()
 > main = putStrLn "howdy!"
