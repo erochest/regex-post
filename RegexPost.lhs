@@ -106,12 +106,6 @@ several primitives.
 We can make several of these read a little more naturally, more like the
 language we usually use for regular expressions.
 
-> refail :: RegEx
-> refail = ReFail
->
-> empty :: RegEx
-> empty = ReEmpty
->
 > (.+.) :: RegEx -> RegEx -> RegEx
 > (.+.) = ReConcat
 >
@@ -202,6 +196,8 @@ expression fails on that input.
 Composing Regular Expressions
 =============================
 
+**TODO: specs for these.**
+
 In fact, let's see how to compose some of these primitives now.
 
 We've already seen that the Kleene star specifies zero or more of the previous
@@ -211,7 +207,7 @@ element. There are other quantifiers for other numbers.
 This is either the regular expression or the empty regex.
 
 > opt :: RegEx -> RegEx
-> opt regex = regex .|. empty
+> opt regex = regex .|. ReEmpty
 
 *One or more* elements: This is often represented with a plus sign (*+*). This
 is the concatenation of the input regex and it with a star.
@@ -224,7 +220,7 @@ This is the alternative of all the literals in the set or, if none of them
 match, the failure regex.
 
 > charClass :: [Char] -> RegEx
-> charClass chars = L.foldl' (flip ReAlt) refail $ L.map re chars
+> charClass chars = L.foldr ReAlt ReFail $ L.map re chars
 
 Based on the last definition, we can create some pre-defined character classes:
 
