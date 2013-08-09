@@ -42,6 +42,12 @@ will do while trying to match against some text. And what better way to
 understand a system like this than to build a toy example and play with the
 output. That's what we'll do in today's (rather long---sorry---post).
 
+A couple of warnings: this isn't a rigorous description of regular expressions
+in any sense. It's not theoretically rigorous; it's not practically rigorous
+for performance or any other metric. It's supposed to be low-level enough to
+teach the underlying concepts of regular expressions, but with a little added
+sugar to make it easier to understand.
+
 Literate Programming
 ====================
 
@@ -61,7 +67,8 @@ your own features or play with it further.
 <details><summary>Haskell Header</summary>
 
 > module Main where
-> 
+>
+> import qualified Data.List as L
 > import qualified Data.Map as M
 
 <div></div></details>
@@ -73,16 +80,20 @@ The first thing we need to do is create the data types for representing the
 regular expression abstractly. Everything in regular expressions boils down to
 several primitives.
 
+1. An empty set that always fails;
+1. An empty set that matches nothing, but always passes;
 1. Match a literal character (*a*);
-2. Concatenation (*a* followed by *b*, usually written *ab*);
-3. Alternation (*a* or *b*, written *a|b*); and
-4. A Kleene star (zero or more *a*, written *a&#x2a;*).
+1. Concatenation (*a* followed by *b*, usually written *ab*);
+1. Alternation (*a* or *b*, written *a|b*); and
+1. A Kleene star (zero or more *a*, written *a&#x2a;*).
 
 > data RegEx
->     = RELiteral Char
->     | REConcat RegEx RegEx
->     | REAlt RegEx RegEx
->     | REStar RegEx
+>     = ReFail
+>     | ReEmpty
+>     | ReLiteral Char
+>     | ReConcat RegEx RegEx
+>     | ReAlt RegEx RegEx
+>     | ReStar RegEx
 >     deriving (Show)
 
 These primitives are combined together into a [state
@@ -96,13 +107,13 @@ the match fails.
 > type NodeId     = Int
 > type NodeEdges  = M.Map Char NodeId
 > type NodeIndex  = M.Map NodeId RegExNode
-> data RegExNode  = RENode
+> data RegExNode  = ReNode
 >                 { nodeId    :: NodeId
 >                 , isStart   :: Bool
 >                 , isStop    :: Bool
 >                 , nodeEdges :: NodeEdges
 >                 } deriving (Show)
-> data RegExState = REState
+> data RegExState = ReState
 >                 { startNode :: NodeId
 >                 , nodeIndex :: NodeIndex
 >                 }
@@ -147,8 +158,8 @@ match.
 <text x="24" y="-5">b</text>
 </g>
 <g transform="translate(120 140)">
-<path d="M20,0 a15,20 0 1 1 0,20" stroke-width="2" stroke="hsl(240, 100%, 20%)" fill="none" marker-end="url(#triangle)" />
-<text x="53" y="15">d</text>
+<path d="M20,0 a25,20 0 1 1 0,20" stroke-width="2" stroke="hsl(240, 100%, 20%)" fill="none" marker-end="url(#triangle)" />
+<text x="73" y="15">d</text>
 </g>
 </g>
 </svg>
@@ -160,8 +171,73 @@ much inputas we can, we can stop. If there's no out-bound lines labelled with
 the current character and we're not in a red circle, then the regular
 expression fails on that input.
 
+Composing Regular Expressions
+=============================
+
+In fact, let's see how to compose some of these primitives now.
+
+We've already seen that the Kleene star specifies zero or more of the previous
+element. There are other quantifiers for other numbers.
+
+*Zero or one* element: This is often represented with a question mark (*?*).
+This is either the regular expression or the empty regex.
+
+> optional :: RegEx -> RegEx
+> optional re = ReAlt re ReEmpty
+
+*One or more* elements: This is often represented with a plus sign (*+*). This
+is the concatenation of the input regex and it with a star.
+
+> more1 :: RegEx -> RegEx
+> more1 re = ReConcat re (ReStar re)
+
+*Character classes* are groups of characters, any one of which could match.
+This is the alternative of all the literals in the set or, if none of them
+match, the failure regex.
+
+> charClass :: [Char] -> RegEx
+> charClass chars = L.foldl' (flip ReAlt) ReFail $ map ReLiteral chars
+
+Based on the last definition, we can create some pre-defined character classes:
+
+> whitespace :: RegEx
+> whitespace = charClass " \t\n\r"
+>
+> lowercase :: RegEx
+> lowercase = charClass ['a'..'z']
+>
+> uppercase :: RegEx
+> uppercase = charClass ['A'..'Z']
+>
+> alpha :: RegEx
+> alpha = charClass (['a'..'z'] ++ ['A'..'Z'])
+>
+> digit :: RegEx
+> digit = charClass ['0'..'9']
+>
+> alphaNumeric :: RegEx
+> alphaNumeric = charClass (['0'..'9'] ++ ['a'..'z'] ++ ['A'..'Z'])
+
+We can combine these with the `RegEx` constructors to create regular
+expressions. For example, here's the regular expression represented by the
+state machine above, `ab|cd*`.
+
+> eg0 :: RegEx
+> eg0 = ReAlt (ReConcat (ReLiteral 'a') (ReLiteral 'b'))
+>             (ReConcat (ReLiteral 'c') (ReStar (ReLiteral 'd')))
+
+Here's a more complicated example. It would be the regular expression
+represented by this PERL-style regex, `\d+\.\d{2}`.
+
+> eg1 :: RegEx
+> eg1 = ReConcat (more1 digit)
+>                (ReConcat (ReLiteral '.')
+>                          (ReConcat digit digit))
+
 Creating the State Machine
 ==========================
+
+
 
 Matching
 ========
