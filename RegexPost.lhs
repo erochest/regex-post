@@ -77,9 +77,13 @@ your own features or play with it further.
 >
 > module RegexPost where
 >
+> import           Control.Applicative
+> import           Control.Monad.State.Strict
 > import qualified Data.List as L
 > import qualified Data.Map  as M
 > import qualified Data.Text as T
+>
+> data Hole = Hole
 
 <div></div></details>
 
@@ -273,8 +277,47 @@ represented by this PERL-style regex, `\d+\.\d{2}`.
 Creating the State Machine
 --------------------------
 
+Compiling the regular expression just involves taking the `RegEx` data
+representing the regular expression and generating the state machine graph,
+stored in `RegExPattern`. The most complicated part of this is keeping track of
+an integer to use for new IDs. Rather than try to thread that data through the
+compilation process, we'll use a `State` monad. Don't worry about the scarey
+name: it's just a way to pretend like we have a global variable while executing
+some functions.
+
+We'll define a type alias to hide the monad even more. Shh. We shouldn't need
+to mention it again.
+
+> type RegExCompiler = State Int
+
+The `compile` function itself is very simple. It just sets up the environment
+and passes execution to the the `compileRegEx` function.
+
 > compile :: RegEx -> RegExPattern
-> compile = undefined
+> compile regex = evalState (compileRegEx regex) startId
+>     where startId = 0
+
+Before we look at the `compileRegEx` function. let's define a utility. To make
+it easier to get a new ID and automatically increment the old one, we'll write
+a function to handle that.
+
+> getNextId :: RegExCompiler Int
+> getNextId = do
+>     nextId <- get
+>     put (nextId + 1)
+>     return nextId
+
+Now, the `compileRegEx` function takes each type of value that a `RegEx` can be
+and builds a pattern for it.
+
+> compileRegEx :: RegEx -> RegExCompiler RegExPattern
+
+For each constructor for `RegEx`, we just need to define the graph created by
+each one.
+
+First, `ReFail` creates a node with no outputs.
+
+> compileRegEx ReFail = (\nid -> ReNode nid False False M.empty) <$> getNextId
 
 Matching
 --------

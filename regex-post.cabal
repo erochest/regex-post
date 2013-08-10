@@ -22,6 +22,7 @@ library
   build-depends:       base ==4.6.*
                      , containers
                      , text
+                     , mtl
 
 test-suite regex-post-specs
   type:                exitcode-stdio-1.0
