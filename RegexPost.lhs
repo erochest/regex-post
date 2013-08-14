@@ -9,7 +9,7 @@ it so I can see it better.
 -->
 
 <style>
-details { background: hsl(240, 0%, 90%); padding: 10px; display: block; }
+details { background: hsl(240, 0%, 90%); padding: 10px; display: block; color: hsl(240, 0%, 80%); }
 summary { display: block; font-weight: bold; }
 </style>
 
@@ -74,14 +74,16 @@ your own features or play with it further.
 <details><summary>Haskell Header</summary>
 
 > {-# LANGUAGE OverloadedStrings #-}
+> {-# LANGUAGE RecordWildCards   #-}
+> {-# LANGUAGE NamedFieldPuns    #-}
 >
 > module RegexPost where
 >
 > import           Control.Applicative
 > import           Control.Monad.State.Strict
-> import qualified Data.List as L
-> import qualified Data.Map  as M
-> import qualified Data.Text as T
+> import qualified Data.List           as L
+> import qualified Data.HashMap.Strict as M
+> import qualified Data.Text           as T
 >
 > data Hole = Hole
 
@@ -94,25 +96,26 @@ The first thing we need to do is create the data types for representing the
 regular expression abstractly. Everything in regular expressions boils down to
 several primitives.
 
-1. An empty set that always fails;
-1. An empty set that matches nothing, but always passes;
 1. Match a literal character (*a*);
 1. Concatenation (*a* followed by *b*, usually written *ab*);
-1. Alternation (*a* or *b*, written *a|b*); and
-1. A Kleene star (zero or more *a*, written *a&#x2a;*).
+1. Alternation (*a* or *b*, written *a|b*);
+1. A Kleene star (zero or more *a*, written *a&#x2a;*);
+1. An optional element, often denoted by a question mark suffix (*a?*).
 
 > data RegEx
->     = ReFail
->     | ReEmpty
->     | ReLiteral Char
+>     = ReLiteral Char
 >     | ReConcat RegEx RegEx
 >     | ReAlt RegEx RegEx
 >     | ReStar RegEx
+>     | ReOpt RegEx
 >     deriving (Show, Eq)
 
 We can make several of these read a little more naturally, more like the
 language we usually use for regular expressions.
 
+> re :: Char -> RegEx
+> re = ReLiteral
+>
 > (.+.) :: RegEx -> RegEx -> RegEx
 > (.+.) = ReConcat
 >
@@ -125,8 +128,8 @@ language we usually use for regular expressions.
 > star :: RegEx -> RegEx
 > star = ReStar
 >
-> re :: Char -> RegEx
-> re = ReLiteral
+> opt :: RegEx -> RegEx
+> opt = ReOpt
 
 These primitives are combined together into a [state
 machine](http://en.wikipedia.org/wiki/State_machine). A state machine is just a
@@ -195,18 +198,17 @@ mapping from characters to more nodes. The entire pattern, and the graph, is
 stored in a mapping from node ID to node.
 
 > type NodeId       = Int
-> type NodeEdges    = M.Map Char NodeId
-> type NodeIndex    = M.Map NodeId RegExNode
+> type NodeEdges    = [RegExEdge]
 > data RegExNode    = ReNode
 >                   { nodeId    :: NodeId
 >                   , isStart   :: Bool
 >                   , isStop    :: Bool
 >                   , nodeEdges :: NodeEdges
 >                   } deriving (Show)
-> data RegExPattern = RePattern
->                   { startNode :: NodeId
->                   , nodeIndex :: NodeIndex
->                   }
+> data RegExEdge    = ReEdge
+>                   { edgeChar :: Char
+>                   , edgeNode :: RegExNode
+>                   } deriving (Show)
 
 The regular expression stored in `RegEx` data structures will be compiled into
 a `RegExPattern` state machine. These are the structures that will actually be
@@ -220,12 +222,6 @@ In fact, let's see how to compose some of these primitives now.
 We've already seen that the Kleene star specifies zero or more of the previous
 element. There are other quantifiers for other numbers.
 
-*Zero or one* element: This is often represented with a question mark (*?*).
-This is either the regular expression or the empty regex.
-
-> opt :: RegEx -> RegEx
-> opt regex = regex .|. ReEmpty
-
 *One or more* elements: This is often represented with a plus sign (*+*). This
 is the concatenation of the input regex and it with a star.
 
@@ -237,7 +233,7 @@ This creates a tree of alternatives. It tries each of the characters in the
 list and, if none of them matches, failes.
 
 > charClass :: [Char] -> RegEx
-> charClass chars = L.foldr ReAlt ReFail (L.map re chars)
+> charClass chars = L.foldr1 ReAlt (L.map re chars)
 
 Based on the last definition, we can create some pre-defined character classes:
 
@@ -269,7 +265,8 @@ here's the regular expression represented by the state machine above, `ab|cd*`.
 > eg0 = re 'a' .+. re 'b' .|. re 'c' .+. star (re 'd')
 
 Here's a more complicated example. It would be the regular expression
-represented by this PERL-style regex, `\d+\.\d{2}`.
+represented by this PERL-style regex, `\d+\.\d{2}`, which looks for a floating
+point number with exactly two positions after the decimal place.
 
 > eg1 :: RegEx
 > eg1 = more1 digit .+. re '.' .+. digit .+. digit
@@ -279,8 +276,23 @@ Creating the State Machine
 
 Compiling the regular expression just involves taking the `RegEx` data
 representing the regular expression and generating the state machine graph,
-stored in `RegExPattern`. The most complicated part of this is keeping track of
-an integer to use for new IDs. Rather than try to thread that data through the
+stored in `RegExPattern`. There are several different algorithms for matching
+regular expressions and types of state machines to do this.
+
+For this demonstration, we'll use what's called a [*Nondeterministic Finite
+Automaton*
+(NFA)](http://en.wikipedia.org/wiki/Nondeterministic_finite_automaton). This
+just means that we'll take a `RegEx` and construct a graph of `RegExNode`
+objects like we saw above. Then, when we're actually matching the input,
+instead of walking from one node to another, we walk from one set of nodes to
+another. This is useful if the input could match more than one edge into more
+than one subsequent node. That might happen for a regular expression like this,
+`\w(\w-)*\w` (this matches a word character, a sequence of word characters and
+dashes, followed by another word character). The benefit of this is that the
+graph can be much smaller and simpler.
+
+The most complicated part of generating the graph is keeping track of an
+integer to use for new IDs. Rather than try to thread that data through the
 compilation process, we'll use a `State` monad. Don't worry about the scarey
 name: it's just a way to pretend like we have a global variable while executing
 some functions.
@@ -293,36 +305,52 @@ to mention it again.
 The `compile` function itself is very simple. It just sets up the environment
 and passes execution to the the `compileRegEx` function.
 
-> compile :: RegEx -> RegExPattern
-> compile regex = evalState (compileRegEx regex) startId
->     where startId = 0
+> compile :: RegEx -> RegExNode
+> compile regex = evalState (compileRegEx startNode regex) (startId + 1)
+>     where startId   = 0
+>           startNode = ReNode startId True False []
 
 Before we look at the `compileRegEx` function. let's define a utility. To make
 it easier to get a new ID and automatically increment the old one, we'll write
-a function to handle that.
+a function to handle that. The function `newNode` builds upon `getNextId` to
+return a new node with default values for everything.
 
 > getNextId :: RegExCompiler Int
 > getNextId = do
 >     nextId <- get
 >     put (nextId + 1)
 >     return nextId
+>
+> newNode :: RegExCompiler RegExNode
+> newNode = do
+>     nextId <- getNextId
+>     return (ReNode nextId False False [])
 
 Now, the `compileRegEx` function takes each type of value that a `RegEx` can be
-and builds a pattern for it.
+and builds a pattern for it. It returns the same node, but linked to rest of
+the graph with the outbound edges. This is necessary because Haskell only uses
+immutable data structures, so we can't directly change the input parent node.
+Instead we update it, creating a new instance of it, and return that so the
+caller has access to it.
 
-> compileRegEx :: RegEx -> RegExCompiler RegExPattern
+> compileRegEx :: RegExNode -> RegEx -> RegExCompiler RegExNode
 
 For each constructor for `RegEx`, we just need to define the graph created by
 each one.
 
-First, `ReFail` creates a node with no outputs.
+First, `ReLiteral` creates a new node, links to it from the parent node, and
+returns the updated pattern.
 
-> compileRegEx ReFail = (\nid -> ReNode nid False False M.empty) <$> getNextId
+> compileRegEx parent@ReNode{..} (ReLiteral c) = do
+>     edge <- ReEdge c <$> newNode
+>     return (parent { nodeEdges = edge : nodeEdges })
+
+**TODO**: Do I need to pass back out the new node also?
 
 Matching
 --------
 
-> match :: RegExPattern -> T.Text -> Bool
+> match :: RegExNode -> T.Text -> Bool
 > match = undefined
 
 The Parser

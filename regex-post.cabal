@@ -20,7 +20,7 @@ library
   exposed-modules:     RegexPost
   -- other-modules:       
   build-depends:       base ==4.6.*
-                     , containers
+                     , unordered-containers
                      , text
                      , mtl
 

@@ -12,7 +12,7 @@ spec :: Spec
 spec = do
     describe "opt" $
         it "should combine a regex with empty." $
-            opt (re 'c') `shouldBe` ReAlt (ReLiteral 'c') ReEmpty
+            opt (re 'c') `shouldBe` ReOpt (ReLiteral 'c')
 
     describe "more1" $
         it "should combine a regex with concat and star." $
@@ -20,9 +20,9 @@ spec = do
 
     describe "charClass" $ do
         it "should combine a single character with literal, alt, and fail." $
-            charClass "c" `shouldBe` ReAlt (ReLiteral 'c') ReFail
+            charClass "c" `shouldBe` ReLiteral 'c'
         it "should combine multiple characters in a right-associative way." $
-            charClass "cd" `shouldBe` ReAlt (ReLiteral 'c') (ReAlt (ReLiteral 'd') ReFail)
+            charClass "cd" `shouldBe` ReAlt (ReLiteral 'c') (ReLiteral 'd')
 
     describe "(.+.)" $ do
         it "should have higher precedence than .|." $
