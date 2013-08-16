@@ -316,10 +316,6 @@ some functions.
 We'll define a type alias to hide the monad even more. Shh. We shouldn't need
 to mention it again.
 
-**TODO**: Have the pattern be M.HashMap NodeId RegExNode and a marker for
-NodeId. Include that as part of the compiler's state. Then have nodeEdges be of
-type M.HashMap Char NodeId.
-
 > data CompilerState = CState
 >                    { rePattern  :: RegExPattern
 >                    , nextNodeId :: NodeId
@@ -428,11 +424,6 @@ Finally, `ReOpt`
 >     (parent', mid) <- compileRegEx parent a
 >     parent''       <- foldM addStarEdge parent' mid
 >     return (parent'', mid)
-
-**TODO: OH CRAP**: For `abc`, this creates the start node, then it creates an
-edge for `a` as well as a node for it, and it updates the start node. However,
-when the edge and node for `b` is created, the node for `a` is udpated, but the
-start node won't be.
 
 **TODO**: Also still need to be able to get the end points from creating a
 graph.
