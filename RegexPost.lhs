@@ -76,10 +76,12 @@ your own features or play with it further.
 > {-# LANGUAGE OverloadedStrings #-}
 > {-# LANGUAGE RecordWildCards   #-}
 > {-# LANGUAGE NamedFieldPuns    #-}
+> {-# LANGUAGE TupleSections     #-}
 >
 > module RegexPost where
 >
 > import           Control.Applicative
+> import           Control.Monad
 > import           Control.Monad.State.Strict
 > import qualified Data.List           as L
 > import qualified Data.HashMap.Strict as M
@@ -130,6 +132,8 @@ language we usually use for regular expressions.
 >
 > opt :: RegEx -> RegEx
 > opt = ReOpt
+
+**TODO**: Move the combinators up here before the state machine.
 
 These primitives are combined together into a [state
 machine](http://en.wikipedia.org/wiki/State_machine). A state machine is just a
@@ -197,18 +201,30 @@ Each `RegExNode` knows whether it's a starting or ending node, and each has a
 mapping from characters to more nodes. The entire pattern, and the graph, is
 stored in a mapping from node ID to node.
 
+**TODO**: Do I want to use lenses here? It complicates things for those who are
+used to Haskell, in some ways, but may make it easier to understand.
+
 > type NodeId       = Int
 > type NodeEdges    = [RegExEdge]
+> type NodeIndex    = M.HashMap NodeId RegExNode
+>
 > data RegExNode    = ReNode
 >                   { nodeId    :: NodeId
 >                   , isStart   :: Bool
 >                   , isStop    :: Bool
 >                   , nodeEdges :: NodeEdges
->                   } deriving (Show)
-> data RegExEdge    = ReEdge
->                   { edgeChar :: Char
->                   , edgeNode :: RegExNode
->                   } deriving (Show)
+>                   }
+>
+> data RegExEdge    = ReCharEdge { edgeChar   :: Char
+>                                , edgeNodeId :: NodeId
+>                                }
+>                   | ReStarEdge { edgeNodeId :: NodeId
+>                                }
+>
+> data RegExPattern = RePattern
+>                   { startNodeId :: NodeId
+>                   , nodeIndex   :: NodeIndex
+>                   }
 
 The regular expression stored in `RegEx` data structures will be compiled into
 a `RegExPattern` state machine. These are the structures that will actually be
@@ -287,7 +303,7 @@ objects like we saw above. Then, when we're actually matching the input,
 instead of walking from one node to another, we walk from one set of nodes to
 another. This is useful if the input could match more than one edge into more
 than one subsequent node. That might happen for a regular expression like this,
-`\w(\w-)*\w` (this matches a word character, a sequence of word characters and
+`\w[\w-]*\w` (this matches a word character, a sequence of word characters and
 dashes, followed by another word character). The benefit of this is that the
 graph can be much smaller and simpler.
 
@@ -300,15 +316,27 @@ some functions.
 We'll define a type alias to hide the monad even more. Shh. We shouldn't need
 to mention it again.
 
-> type RegExCompiler = State Int
+**TODO**: Have the pattern be M.HashMap NodeId RegExNode and a marker for
+NodeId. Include that as part of the compiler's state. Then have nodeEdges be of
+type M.HashMap Char NodeId.
+
+> data CompilerState = CState
+>                    { rePattern  :: RegExPattern
+>                    , nextNodeId :: NodeId
+>                    }
+>
+> type RegExCompiler = State CompilerState
 
 The `compile` function itself is very simple. It just sets up the environment
 and passes execution to the the `compileRegEx` function.
 
-> compile :: RegEx -> RegExNode
-> compile regex = evalState (compileRegEx startNode regex) (startId + 1)
->     where startId   = 0
->           startNode = ReNode startId True False []
+> compile :: RegEx -> RegExPattern
+> compile regex =
+>     rePattern (execState (compileRegEx startNode regex) startState)
+>     where startId    = 0
+>           startNode  = ReNode startId True False []
+>           pattern    = RePattern startId (M.singleton startId startNode)
+>           startState = CState pattern (startId + 1)
 
 Before we look at the `compileRegEx` function. let's define a utility. To make
 it easier to get a new ID and automatically increment the old one, we'll write
@@ -317,23 +345,36 @@ return a new node with default values for everything.
 
 > getNextId :: RegExCompiler Int
 > getNextId = do
->     nextId <- get
->     put (nextId + 1)
+>     nextId <- gets nextNodeId
+>     modify (\s -> s { nextNodeId = nextId + 1 })
 >     return nextId
 >
 > newNode :: RegExCompiler RegExNode
 > newNode = do
 >     nextId <- getNextId
 >     return (ReNode nextId False False [])
+>
+> addEdge :: RegExEdge -> RegExNode -> RegExCompiler RegExNode
+> addEdge edge from@ReNode{nodeId, nodeEdges} = do
+>     modify undefined
+>     return from'
+>     where from' = from { nodeEdges = edge : nodeEdges }
+>
+> addCharEdge :: Char -> RegExNode -> RegExNode -> RegExCompiler RegExNode
+> addCharEdge c to from = addEdge (ReCharEdge c (nodeId to)) from
+>
+> addStarEdge :: RegExNode -> RegExNode -> RegExCompiler RegExNode
+> addStarEdge to from = addEdge (ReStarEdge (nodeId to)) from
 
 Now, the `compileRegEx` function takes each type of value that a `RegEx` can be
 and builds a pattern for it. It returns the same node, but linked to rest of
 the graph with the outbound edges. This is necessary because Haskell only uses
 immutable data structures, so we can't directly change the input parent node.
 Instead we update it, creating a new instance of it, and return that so the
-caller has access to it.
+caller has access to it. It also returns all of the nodes that it has created,
+so that they can be used for concatenation and other combinations.
 
-> compileRegEx :: RegExNode -> RegEx -> RegExCompiler RegExNode
+> compileRegEx :: RegExNode -> RegEx -> RegExCompiler (RegExNode, [RegExNode])
 
 For each constructor for `RegEx`, we just need to define the graph created by
 each one.
@@ -341,11 +382,60 @@ each one.
 First, `ReLiteral` creates a new node, links to it from the parent node, and
 returns the updated pattern.
 
-> compileRegEx parent@ReNode{..} (ReLiteral c) = do
->     edge <- ReEdge c <$> newNode
->     return (parent { nodeEdges = edge : nodeEdges })
+> compileRegEx parent@ReNode{nodeEdges} (ReLiteral c) = do
+>     node <- newNode
+>     let edge = ReCharEdge c (nodeId node)
+>     return (parent { nodeEdges = edge : nodeEdges }, [node])
 
-**TODO**: Do I need to pass back out the new node also?
+Second, `ReConcat` creates the first processes the first item, and then it
+creates a new set of graphs for the second graph for each child of the first.
+That probably makes more sense in code than it does explained (the comments
+below may help too).
+
+> compileRegEx parent (ReConcat a b) = do
+
+First compile a and get its children.
+
+>     (parent', aChildren) <- compileRegEx parent a
+
+Now, compile b, concatenating it onto every child from compiling a. The result
+is the updated parent and the updated children from a with the children from
+compiling `b` repeatedly.
+
+>     (parent',) <$> L.foldl' accumChildren [] <$> mapM (flip compileRegEx b) aChildren
+>     where accumChildren list (x, xs) = x : (xs ++ list)
+
+Third, `ReAlt` creates the subgraphs for each of its branches and then
+returns all of their children as its children.
+
+> compileRegEx parent@ReNode{..} (ReAlt a b) = do
+>     (aNode, aChildren) <- compileRegEx parent a
+>     (bNode, bChildren) <- compileRegEx aNode  b
+>     return (bNode, aChildren ++ bChildren)
+
+Fourth, `ReStar`.
+
+**TODO**: Umm. This needs parent to link to itself. Rather than working out
+tying the knot, let's just put this off until the index is finished. That will
+provide the level of indirection and abstraction I need to make this happen.
+
+> compileRegEx parent (ReStar a) = do
+>     undefined
+
+Finally, `ReOpt`
+
+> compileRegEx parent (ReOpt a) =  do
+>     (parent', mid) <- compileRegEx parent a
+>     parent''       <- foldM addStarEdge parent' mid
+>     return (parent'', mid)
+
+**TODO: OH CRAP**: For `abc`, this creates the start node, then it creates an
+edge for `a` as well as a node for it, and it updates the start node. However,
+when the edge and node for `b` is created, the node for `a` is udpated, but the
+start node won't be.
+
+**TODO**: Also still need to be able to get the end points from creating a
+graph.
 
 Matching
 --------
