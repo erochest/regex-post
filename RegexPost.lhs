@@ -77,10 +77,12 @@ your own features or play with it further.
 > {-# LANGUAGE RecordWildCards   #-}
 > {-# LANGUAGE NamedFieldPuns    #-}
 > {-# LANGUAGE TupleSections     #-}
+> {-# LANGUAGE TemplateHaskell   #-}
 >
 > module RegexPost where
 >
 > import           Control.Applicative
+> import           Control.Lens
 > import           Control.Monad
 > import           Control.Monad.State.Strict
 > import qualified Data.List           as L
@@ -209,22 +211,30 @@ used to Haskell, in some ways, but may make it easier to understand.
 > type NodeIndex    = M.HashMap NodeId RegExNode
 >
 > data RegExNode    = ReNode
->                   { nodeId    :: NodeId
->                   , isStart   :: Bool
->                   , isStop    :: Bool
->                   , nodeEdges :: NodeEdges
+>                   { _nodeId    :: NodeId
+>                   , _isStart   :: Bool
+>                   , _isStop    :: Bool
+>                   , _nodeEdges :: NodeEdges
 >                   }
 >
-> data RegExEdge    = ReCharEdge { edgeChar   :: Char
->                                , edgeNodeId :: NodeId
+> data RegExEdge    = ReCharEdge { _edgeChar   :: Char
+>                                , _edgeNodeId :: NodeId
 >                                }
->                   | ReStarEdge { edgeNodeId :: NodeId
+>                   | ReStarEdge { _edgeNodeId :: NodeId
 >                                }
 >
 > data RegExPattern = RePattern
->                   { startNodeId :: NodeId
->                   , nodeIndex   :: NodeIndex
+>                   { _startNodeId :: NodeId
+>                   , _nodeIndex   :: NodeIndex
 >                   }
+
+<details><summary>Making Lenses</summary>
+
+> makeLenses ''RegExNode
+> makeLenses ''RegExEdge
+> makeLenses ''RegExPattern
+
+</details>
 
 The regular expression stored in `RegEx` data structures will be compiled into
 a `RegExPattern` state machine. These are the structures that will actually be
@@ -351,16 +361,17 @@ return a new node with default values for everything.
 >     return (ReNode nextId False False [])
 >
 > addEdge :: RegExEdge -> RegExNode -> RegExCompiler RegExNode
-> addEdge edge from@ReNode{nodeId, nodeEdges} = do
+> addEdge edge fromNode = do
 >     modify undefined
->     return from'
->     where from' = from { nodeEdges = edge : nodeEdges }
+>     return (fromNode & nodeEdges %~ (\edges -> edge : edges))
 >
 > addCharEdge :: Char -> RegExNode -> RegExNode -> RegExCompiler RegExNode
-> addCharEdge c to from = addEdge (ReCharEdge c (nodeId to)) from
+> addCharEdge c toNode fromNode =
+>     addEdge (ReCharEdge c (toNode ^. nodeId)) fromNode
 >
 > addStarEdge :: RegExNode -> RegExNode -> RegExCompiler RegExNode
-> addStarEdge to from = addEdge (ReStarEdge (nodeId to)) from
+> addStarEdge toNode fromNode =
+>     addEdge (ReStarEdge (toNode ^. nodeId)) fromNode
 
 Now, the `compileRegEx` function takes each type of value that a `RegEx` can be
 and builds a pattern for it. It returns the same node, but linked to rest of
@@ -378,10 +389,12 @@ each one.
 First, `ReLiteral` creates a new node, links to it from the parent node, and
 returns the updated pattern.
 
-> compileRegEx parent@ReNode{nodeEdges} (ReLiteral c) = do
+> compileRegEx parent (ReLiteral c) = do
 >     node <- newNode
->     let edge = ReCharEdge c (nodeId node)
->     return (parent { nodeEdges = edge : nodeEdges }, [node])
+>     let edge = ReCharEdge c (node ^. nodeId)
+>     return ( parent & nodeEdges %~ (\edges -> edge : edges)
+>            , [node]
+>            )
 
 Second, `ReConcat` creates the first processes the first item, and then it
 creates a new set of graphs for the second graph for each child of the first.

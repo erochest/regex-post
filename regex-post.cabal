@@ -23,6 +23,10 @@ library
                      , unordered-containers
                      , text
                      , mtl
+                     , async
+                     , parallel
+                     , transformers
+                     , lens
 
 test-suite regex-post-specs
   type:                exitcode-stdio-1.0
