@@ -12,11 +12,11 @@ spec :: Spec
 spec = do
     describe "opt" $
         it "should combine a regex with empty." $
-            opt (regex 'c') `shouldBe` ReOpt (ReLiteral 'c')
+            opt (re 'c') `shouldBe` ReOpt (ReLiteral 'c')
 
     describe "more1" $
         it "should combine a regex with concat and star." $
-            more1 (regex 'c') `shouldBe` ReConcat (ReLiteral 'c') (ReStar (ReLiteral 'c'))
+            more1 (re 'c') `shouldBe` ReConcat (ReLiteral 'c') (ReStar (ReLiteral 'c'))
 
     describe "charClass" $ do
         it "should combine a single character with literal, alt, and fail." $
@@ -32,5 +32,5 @@ spec = do
             eg `shouldBe` ReConcat (ReConcat (ReLiteral '0') (ReStar (ReLiteral '0')))
                                    (ReConcat (ReLiteral '.')
                                              (ReConcat (ReLiteral '0') (ReLiteral '0')))
-            where eg = more1 (regex '0') .+. regex '.' .+. regex '0' .+. regex '0'
+            where eg = more1 (re '0') .+. re '.' .+. re '0' .+. re '0'
 

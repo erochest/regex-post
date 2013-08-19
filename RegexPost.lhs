@@ -82,7 +82,7 @@ your own features or play with it further.
 > module RegexPost where
 >
 > import           Control.Applicative
-> import           Control.Lens
+> import           Control.Lens hiding (re)
 > import           Control.Monad
 > import           Control.Monad.State.Strict
 > import qualified Data.List           as L
@@ -117,8 +117,8 @@ several primitives.
 We can make several of these read a little more naturally, more like the
 language we usually use for regular expressions.
 
-> regex :: Char -> RegEx
-> regex = ReLiteral
+> re :: Char -> RegEx
+> re = ReLiteral
 >
 > (.+.) :: RegEx -> RegEx -> RegEx
 > (.+.) = ReConcat
@@ -248,7 +248,7 @@ This creates a tree of alternatives. It tries each of the characters in the
 list and, if none of them matches, failes.
 
 > charClass :: [Char] -> RegEx
-> charClass chars = L.foldr1 ReAlt (L.map regex chars)
+> charClass chars = L.foldr1 ReAlt (L.map re chars)
 
 Based on the last definition, we can create some pre-defined character classes:
 
@@ -271,20 +271,20 @@ Based on the last definition, we can create some pre-defined character classes:
 > alphaNumeric = charClass (['0'..'9'] ++ ['a'..'z'] ++ ['A'..'Z'])
 >
 > word :: RegEx
-> word = regex '_' .|. alphaNumeric
+> word = re '_' .|. alphaNumeric
 
 We can combine these to create more complex regular expressions. For example,
 here's the regular expression represented by the state machine above, `ab|cd*`.
 
 > eg0 :: RegEx
-> eg0 = regex 'a' .+. regex 'b' .|. regex 'c' .+. star (regex 'd')
+> eg0 = re 'a' .+. re 'b' .|. re 'c' .+. star (re 'd')
 
 Here's a more complicated example. It would be the regular expression
 represented by this PERL-style regex, `\d+\.\d{2}`, which looks for a floating
 point number with exactly two positions after the decimal place.
 
 > eg1 :: RegEx
-> eg1 = more1 digit .+. regex '.' .+. digit .+. digit
+> eg1 = more1 digit .+. re '.' .+. digit .+. digit
 
 Creating the State Machine
 --------------------------
