@@ -117,8 +117,8 @@ several primitives.
 We can make several of these read a little more naturally, more like the
 language we usually use for regular expressions.
 
-> re :: Char -> RegEx
-> re = ReLiteral
+> regex :: Char -> RegEx
+> regex = ReLiteral
 >
 > (.+.) :: RegEx -> RegEx -> RegEx
 > (.+.) = ReConcat
@@ -203,9 +203,6 @@ Each `RegExNode` knows whether it's a starting or ending node, and each has a
 mapping from characters to more nodes. The entire pattern, and the graph, is
 stored in a mapping from node ID to node.
 
-**TODO**: Do I want to use lenses here? It complicates things for those who are
-used to Haskell, in some ways, but may make it easier to understand.
-
 > type NodeId       = Int
 > type NodeEdges    = [RegExEdge]
 > type NodeIndex    = M.HashMap NodeId RegExNode
@@ -228,14 +225,6 @@ used to Haskell, in some ways, but may make it easier to understand.
 >                   , _nodeIndex   :: NodeIndex
 >                   }
 
-<details><summary>Making Lenses</summary>
-
-> makeLenses ''RegExNode
-> makeLenses ''RegExEdge
-> makeLenses ''RegExPattern
-
-</details>
-
 The regular expression stored in `RegEx` data structures will be compiled into
 a `RegExPattern` state machine. These are the structures that will actually be
 used to match input strings against the regular expression.
@@ -252,14 +241,14 @@ element. There are other quantifiers for other numbers.
 is the concatenation of the input regex and it with a star.
 
 > more1 :: RegEx -> RegEx
-> more1 regex = regex .+. star regex
+> more1 rgx = rgx .+. star rgx
 
 *Character classes* are groups of characters, any one of which could match.
 This creates a tree of alternatives. It tries each of the characters in the
 list and, if none of them matches, failes.
 
 > charClass :: [Char] -> RegEx
-> charClass chars = L.foldr1 ReAlt (L.map re chars)
+> charClass chars = L.foldr1 ReAlt (L.map regex chars)
 
 Based on the last definition, we can create some pre-defined character classes:
 
@@ -282,20 +271,20 @@ Based on the last definition, we can create some pre-defined character classes:
 > alphaNumeric = charClass (['0'..'9'] ++ ['a'..'z'] ++ ['A'..'Z'])
 >
 > word :: RegEx
-> word = re '_' .|. alphaNumeric
+> word = regex '_' .|. alphaNumeric
 
 We can combine these to create more complex regular expressions. For example,
 here's the regular expression represented by the state machine above, `ab|cd*`.
 
 > eg0 :: RegEx
-> eg0 = re 'a' .+. re 'b' .|. re 'c' .+. star (re 'd')
+> eg0 = regex 'a' .+. regex 'b' .|. regex 'c' .+. star (regex 'd')
 
 Here's a more complicated example. It would be the regular expression
 represented by this PERL-style regex, `\d+\.\d{2}`, which looks for a floating
 point number with exactly two positions after the decimal place.
 
 > eg1 :: RegEx
-> eg1 = more1 digit .+. re '.' .+. digit .+. digit
+> eg1 = more1 digit .+. regex '.' .+. digit .+. digit
 
 Creating the State Machine
 --------------------------
@@ -327,18 +316,27 @@ We'll define a type alias to hide the monad even more. Shh. We shouldn't need
 to mention it again.
 
 > data CompilerState = CState
->                    { rePattern  :: RegExPattern
->                    , nextNodeId :: NodeId
+>                    { _rePattern  :: RegExPattern
+>                    , _nextNodeId :: NodeId
 >                    }
 >
 > type RegExCompiler = State CompilerState
+
+<details><summary>Making Lenses</summary>
+
+> makeLenses ''RegExNode
+> makeLenses ''RegExEdge
+> makeLenses ''RegExPattern
+> makeLenses ''CompilerState
+
+<div></div></details>
 
 The `compile` function itself is very simple. It just sets up the environment
 and passes execution to the the `compileRegEx` function.
 
 > compile :: RegEx -> RegExPattern
-> compile regex =
->     rePattern (execState (compileRegEx startNode regex) startState)
+> compile rgx =
+>     (execState (compileRegEx startNode rgx) startState) ^. rePattern
 >     where startId    = 0
 >           startNode  = ReNode startId True False []
 >           pattern    = RePattern startId (M.singleton startId startNode)
@@ -350,10 +348,7 @@ a function to handle that. The function `newNode` builds upon `getNextId` to
 return a new node with default values for everything.
 
 > getNextId :: RegExCompiler Int
-> getNextId = do
->     nextId <- gets nextNodeId
->     modify (\s -> s { nextNodeId = nextId + 1 })
->     return nextId
+> getNextId = nextNodeId <<%= (\nId -> nId + 1)
 >
 > newNode :: RegExCompiler RegExNode
 > newNode = do
