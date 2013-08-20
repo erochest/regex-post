@@ -135,20 +135,73 @@ language we usually use for regular expressions.
 > opt :: RegEx -> RegEx
 > opt = ReOpt
 
-**TODO**: Move the combinators up here before the state machine.
+This may seem insufficient for creating full-fledged regular expressions, but
+we can combine these to build up a richer vocabulary.
 
-These primitives are combined together into a [state
+Composing Regular Expressions
+-----------------------------
+
+In fact, let's see how to compose some of these primitives now.
+
+We've already seen that the Kleene star specifies zero or more of the previous
+element. There are other quantifiers for other numbers.
+
+*One or more* elements: This is often represented with a plus sign (*+*). This
+is the concatenation of the input regex and it with a star.
+
+> more1 :: RegEx -> RegEx
+> more1 rgx = rgx .+. star rgx
+
+*Character classes* are groups of characters, any one of which could match.
+This creates a tree of alternatives. It tries each of the characters in the
+list and, if none of them matches, failes.
+
+> charClass :: [Char] -> RegEx
+> charClass chars = L.foldr1 ReAlt (L.map re chars)
+
+Based on the last definition, we can create some pre-defined character classes:
+
+> whitespace :: RegEx
+> whitespace = charClass " \t\n\r"
+>
+> lowercase :: RegEx
+> lowercase = charClass ['a'..'z']
+>
+> uppercase :: RegEx
+> uppercase = charClass ['A'..'Z']
+>
+> alpha :: RegEx
+> alpha = charClass (['a'..'z'] ++ ['A'..'Z'])
+>
+> digit :: RegEx
+> digit = charClass ['0'..'9']
+>
+> alphaNumeric :: RegEx
+> alphaNumeric = charClass (['0'..'9'] ++ ['a'..'z'] ++ ['A'..'Z'])
+>
+> word :: RegEx
+> word = re '_' .|. alphaNumeric
+
+We can combine these to create more complex regular expressions. For example,
+here's the regular expression represented by the state machine above, `ab|cd*`.
+
+> eg0 :: RegEx
+> eg0 = re 'a' .+. re 'b' .|. re 'c' .+. star (re 'd')
+
+Here's a more complicated example. It would be the regular expression
+represented by this PERL-style regex, `\d+\.\d{2}`, which looks for a floating
+point number with exactly two positions after the decimal place.
+
+> eg1 :: RegEx
+> eg1 = more1 digit .+. re '.' .+. digit .+. digit
+
+When we combine these structures, we're building up the definition of a [state
 machine](http://en.wikipedia.org/wiki/State_machine). A state machine is just a
 network of nodes. The computer keeps a bookmark pointing to one node. When it
 tries to match the input, it takes one character as input, and based on that,
 it moves to another node. If a node is marked as a valid stop position, that's
 cool: the input matched. If there's no transition for the current input, then
 the match fails.
-
-In practice, there are more things than the four we listed above, but those are
-implementation details for performance. In theory, character classes and other
-things are build by combining those four things with transitions in the state
-machine. We'll see some examples of that below.
 
 For example, here's one way to represent the regular expression `ab|cd*` as a
 state machine. This would match either the string *ab* or *c* followed by any
@@ -228,63 +281,6 @@ stored in a mapping from node ID to node.
 The regular expression stored in `RegEx` data structures will be compiled into
 a `RegExPattern` state machine. These are the structures that will actually be
 used to match input strings against the regular expression.
-
-Composing Regular Expressions
------------------------------
-
-In fact, let's see how to compose some of these primitives now.
-
-We've already seen that the Kleene star specifies zero or more of the previous
-element. There are other quantifiers for other numbers.
-
-*One or more* elements: This is often represented with a plus sign (*+*). This
-is the concatenation of the input regex and it with a star.
-
-> more1 :: RegEx -> RegEx
-> more1 rgx = rgx .+. star rgx
-
-*Character classes* are groups of characters, any one of which could match.
-This creates a tree of alternatives. It tries each of the characters in the
-list and, if none of them matches, failes.
-
-> charClass :: [Char] -> RegEx
-> charClass chars = L.foldr1 ReAlt (L.map re chars)
-
-Based on the last definition, we can create some pre-defined character classes:
-
-> whitespace :: RegEx
-> whitespace = charClass " \t\n\r"
->
-> lowercase :: RegEx
-> lowercase = charClass ['a'..'z']
->
-> uppercase :: RegEx
-> uppercase = charClass ['A'..'Z']
->
-> alpha :: RegEx
-> alpha = charClass (['a'..'z'] ++ ['A'..'Z'])
->
-> digit :: RegEx
-> digit = charClass ['0'..'9']
->
-> alphaNumeric :: RegEx
-> alphaNumeric = charClass (['0'..'9'] ++ ['a'..'z'] ++ ['A'..'Z'])
->
-> word :: RegEx
-> word = re '_' .|. alphaNumeric
-
-We can combine these to create more complex regular expressions. For example,
-here's the regular expression represented by the state machine above, `ab|cd*`.
-
-> eg0 :: RegEx
-> eg0 = re 'a' .+. re 'b' .|. re 'c' .+. star (re 'd')
-
-Here's a more complicated example. It would be the regular expression
-represented by this PERL-style regex, `\d+\.\d{2}`, which looks for a floating
-point number with exactly two positions after the decimal place.
-
-> eg1 :: RegEx
-> eg1 = more1 digit .+. re '.' .+. digit .+. digit
 
 Creating the State Machine
 --------------------------
