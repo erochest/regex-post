@@ -320,6 +320,19 @@ to mention it again.
 
 <details><summary>Making Lenses</summary>
 
+Lenses are just a way to interact with Haskell's immutable data structures in a
+way that looks a lot like working with most other languages' mutable data
+structures. For example, once an instance of `CompilerState` has been created,
+its value for `nextNodeId` cannot be changed. Instead we create a new
+`CompilerState` with a new value for that slot. Haskell's syntax for that is
+awkward (`state { _nextNodeId = 42 }`), but with the `Control.Lens` library, we
+can write it more "naturally" (`state & nextNodeId .~ 42`). Of course, in
+typical Haskell style, once you go down that rabbit hole, there's a lot more
+power. Don't worry about all the strange punctuation you see. Just try to get
+the gist of what the lines are doing.
+
+Anyway, these lines actually create the lenses for these data structures.
+
 > makeLenses ''RegExNode
 > makeLenses ''RegExEdge
 > makeLenses ''RegExPattern
