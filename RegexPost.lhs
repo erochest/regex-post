@@ -83,7 +83,6 @@ your own features or play with it further.
 >
 > import           Control.Applicative
 > import           Control.Lens hiding (re)
-> import           Control.Monad
 > import           Control.Monad.State.Strict
 > import qualified Data.List           as L
 > import qualified Data.HashMap.Strict as M
@@ -360,11 +359,12 @@ Anyway, these lines actually create the lenses for these data structures.
 <div></div></details>
 
 The `compile` function itself is very simple. It just sets up the environment
-and passes execution to the the `compileRegEx` function.
+and passes execution to the the `compileRegEx` function. Finally, it has to set
+the stop flag on the final output nodes.
 
 > compile :: RegEx -> RegExPattern
 > compile rgx =
->     (execState (compileRegEx startNode rgx) startState) ^. rePattern
+>     (execState (compileRegEx startNode rgx >>= mapM_ setStop) startState) ^. rePattern
 >     where startId    = 0
 >           startNode  = ReNode startId True False []
 >           pattern    = RePattern startId (M.singleton startId startNode)
@@ -382,6 +382,11 @@ return a new node with default values for everything.
 > newNode = do
 >     nextId <- getNextId
 >     return (ReNode nextId False False [])
+>
+> refreshNode :: RegExNode -> RegExCompiler RegExNode
+> refreshNode node = do
+>      idx <- use (rePattern . nodeIndex)
+>      return (idx M.! (node ^. nodeId))
 >
 > insertNode :: RegExNode -> RegExCompiler ()
 > insertNode node = rePattern . nodeIndex %= \idx ->
@@ -404,20 +409,21 @@ return a new node with default values for everything.
 > addNullEdge :: RegExNode -> RegExNode -> RegExCompiler RegExNode
 > addNullEdge toNode fromNode =
 >     addEdge (ReNullEdge (toNode ^. nodeId)) fromNode
+>
+> setStop :: RegExNode -> RegExCompiler RegExNode
+> setStop node = do
+>     insertNode stopNode
+>     return stopNode
+>     where stopNode = node & isStop .~ True
 
 Now, the `compileRegEx` function takes each type of value that a `RegEx` can be
 and builds a pattern for it. It returns the same node, but linked to rest of
 the graph with the outbound edges. This is necessary because Haskell only uses
 immutable data structures, so we can't directly change the input parent node.
 Instead we update it, creating a new instance of it, and return that so the
-caller has access to it. It also returns all of the nodes that it has created,
-so that they can be used for concatenation and other combinations.
+caller has access to it. It also returns all of the final nodes for this.
 
-**TODO**: I'm not sure that returning the parent back again is still necessary,
-since the state machine is held in the index in the state. I just need to make
-sure the index gets updated everywhere.
-
-> compileRegEx :: RegExNode -> RegEx -> RegExCompiler (RegExNode, [RegExNode])
+> compileRegEx :: RegExNode -> RegEx -> RegExCompiler [RegExNode]
 
 For each constructor for `RegEx`, we just need to define the graph created by
 each one.
@@ -427,10 +433,8 @@ returns the updated pattern.
 
 > compileRegEx parent (ReLiteral c) = do
 >     node <- newNode
->     let edge = ReCharEdge c (node ^. nodeId)
->     return ( parent & nodeEdges %~ (\edges -> edge : edges)
->            , [node]
->            )
+>     _ <- addCharEdge c node parent
+>     return [node]
 
 Second, `ReConcat` creates the first processes the first item, and then it
 creates a new set of graphs for the second graph for each child of the first.
@@ -441,39 +445,35 @@ below may help too).
 
 First compile a and get its children.
 
->     (parent', aChildren) <- compileRegEx parent a
+>     aChildren <- compileRegEx parent a
 
 Now, compile b, concatenating it onto every child from compiling a. The result
 is the updated parent and the updated children from a with the children from
 compiling `b` repeatedly.
 
->     (parent',) <$> L.foldl' accumChildren [] <$> mapM (flip compileRegEx b) aChildren
->     where accumChildren list (x, xs) = x : (xs ++ list)
+>     concat <$> mapM (flip compileRegEx b) aChildren
 
 Third, `ReAlt` creates the subgraphs for each of its branches and then
 returns all of their children as its children.
 
 > compileRegEx parent@ReNode{..} (ReAlt a b) = do
->     (aNode, aChildren) <- compileRegEx parent a
->     (bNode, bChildren) <- compileRegEx aNode  b
->     return (bNode, aChildren ++ bChildren)
+>     aChildren <- compileRegEx parent a
+>     parenta   <- refreshNode parent
+>     bChildren <- compileRegEx parenta  b
+>     return (aChildren ++ bChildren)
 
 Fourth, `ReStar` creates a loop from a node back to itself.
 
 > compileRegEx parent (ReStar a) = do
->     (aNode, aChildren) <- compileRegEx parent a
->     mapM_ (addNullEdge parent) aChildren
->     return (aNode, [aNode])
+>     aChildren <- compileRegEx parent a
+>     mapM (addNullEdge parent) aChildren
 
 Finally, `ReOpt`
 
 > compileRegEx parent (ReOpt a) =  do
->     (parent', mid) <- compileRegEx parent a
->     parent''       <- foldM addStarEdge parent' mid
->     return (parent'', mid)
-
-**TODO**: Also still need to be able to get the end points from creating a
-graph.
+>     mid <- compileRegEx parent a
+>     mapM_ (addStarEdge parent) mid
+>     mapM refreshNode mid
 
 Matching
 --------
