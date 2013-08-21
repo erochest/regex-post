@@ -252,27 +252,46 @@ the current character and we're not in a red circle, then the regular
 expression fails on that input.
 
 We'll implement this state machine in a way that closely follows the diagram.
-Each `RegExNode` knows whether it's a starting or ending node, and each has a
-mapping from characters to more nodes. The entire pattern, and the graph, is
-stored in a mapping from node ID to node.
 
 > type NodeId       = Int
 > type NodeEdges    = [RegExEdge]
 > type NodeIndex    = M.HashMap NodeId RegExNode
->
+
+Each `RegExNode` knows whether it's a starting or ending node, and each has a
+mapping from characters to more nodes. The entire pattern, and the graph, is
+stored in a mapping from node ID to node.
+
 > data RegExNode    = ReNode
 >                   { _nodeId    :: NodeId
 >                   , _isStart   :: Bool
 >                   , _isStop    :: Bool
 >                   , _nodeEdges :: NodeEdges
 >                   }
->
+
+Edges come in three flavors.
+
+First, a *character edge* is only traversed when the edge is an outbound edge
+from the current node and its `edgeChar` is seen on the input.
+
 > data RegExEdge    = ReCharEdge { _edgeChar   :: Char
 >                                , _edgeNodeId :: NodeId
 >                                }
+
+Second, *star edges* are followed no matter what input is next.
+
 >                   | ReStarEdge { _edgeNodeId :: NodeId
 >                                }
->
+
+Finally, *null edges* are more like jumps. They don't consume any input, but
+whenever they're encountered they automatically shift the current node.
+
+>                   | ReNullEdge { _edgeNodeId :: NodeId
+>                                }
+
+The `RegExPattern` then contains the global view of the pattern. It knows which
+is the start node, and it maintains an index of the all the nodes. This will be
+used when we start traversing the state machine.
+
 > data RegExPattern = RePattern
 >                   { _startNodeId :: NodeId
 >                   , _nodeIndex   :: NodeIndex
@@ -364,10 +383,15 @@ return a new node with default values for everything.
 >     nextId <- getNextId
 >     return (ReNode nextId False False [])
 >
+> insertNode :: RegExNode -> RegExCompiler ()
+> insertNode node = rePattern . nodeIndex %= \idx ->
+>     M.insert (node ^. nodeId) node idx
+>
 > addEdge :: RegExEdge -> RegExNode -> RegExCompiler RegExNode
 > addEdge edge fromNode = do
->     modify undefined
->     return (fromNode & nodeEdges %~ (\edges -> edge : edges))
+>     insertNode newFrom
+>     return newFrom
+>     where newFrom = fromNode & nodeEdges %~ (\edges -> edge : edges)
 >
 > addCharEdge :: Char -> RegExNode -> RegExNode -> RegExCompiler RegExNode
 > addCharEdge c toNode fromNode =
@@ -376,6 +400,10 @@ return a new node with default values for everything.
 > addStarEdge :: RegExNode -> RegExNode -> RegExCompiler RegExNode
 > addStarEdge toNode fromNode =
 >     addEdge (ReStarEdge (toNode ^. nodeId)) fromNode
+>
+> addNullEdge :: RegExNode -> RegExNode -> RegExCompiler RegExNode
+> addNullEdge toNode fromNode =
+>     addEdge (ReNullEdge (toNode ^. nodeId)) fromNode
 
 Now, the `compileRegEx` function takes each type of value that a `RegEx` can be
 and builds a pattern for it. It returns the same node, but linked to rest of
@@ -384,6 +412,10 @@ immutable data structures, so we can't directly change the input parent node.
 Instead we update it, creating a new instance of it, and return that so the
 caller has access to it. It also returns all of the nodes that it has created,
 so that they can be used for concatenation and other combinations.
+
+**TODO**: I'm not sure that returning the parent back again is still necessary,
+since the state machine is held in the index in the state. I just need to make
+sure the index gets updated everywhere.
 
 > compileRegEx :: RegExNode -> RegEx -> RegExCompiler (RegExNode, [RegExNode])
 
@@ -426,14 +458,12 @@ returns all of their children as its children.
 >     (bNode, bChildren) <- compileRegEx aNode  b
 >     return (bNode, aChildren ++ bChildren)
 
-Fourth, `ReStar`.
-
-**TODO**: Umm. This needs parent to link to itself. Rather than working out
-tying the knot, let's just put this off until the index is finished. That will
-provide the level of indirection and abstraction I need to make this happen.
+Fourth, `ReStar` creates a loop from a node back to itself.
 
 > compileRegEx parent (ReStar a) = do
->     undefined
+>     (aNode, aChildren) <- compileRegEx parent a
+>     mapM_ (addNullEdge parent) aChildren
+>     return (aNode, [aNode])
 
 Finally, `ReOpt`
 
