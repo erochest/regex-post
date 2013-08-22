@@ -86,6 +86,7 @@ your own features or play with it further.
 > import           Control.Monad.State.Strict
 > import qualified Data.List           as L
 > import qualified Data.HashMap.Strict as M
+> import qualified Data.HashSet        as S
 > import qualified Data.Text           as T
 >
 > data Hole = Hole
@@ -98,6 +99,12 @@ The Data Model
 The first thing we need to do is create the data types for representing the
 regular expression abstractly. Everything in regular expressions boils down to
 several primitives.
+
+1. An empty set that always fails;
+1. An empty string that always matches, but doesn't advance the input;
+1. A literal character;
+1. Concatenation (*a* followed by *b*, usually written *ab*);
+1. 
 
 1. Match a literal character (*a*);
 1. Concatenation (*a* followed by *b*, usually written *ab*);
@@ -276,15 +283,9 @@ from the current node and its `edgeChar` is seen on the input.
 >                                , _edgeNodeId :: NodeId
 >                                }
 
-Second, *star edges* are followed no matter what input is next.
+Second, *wildcard edges* are followed no matter what input is next.
 
->                   | ReStarEdge { _edgeNodeId :: NodeId
->                                }
-
-Finally, *null edges* are more like jumps. They don't consume any input, but
-whenever they're encountered they automatically shift the current node.
-
->                   | ReNullEdge { _edgeNodeId :: NodeId
+>                   | ReWildEdge { _edgeNodeId :: NodeId
 >                                }
 
 The `RegExPattern` then contains the global view of the pattern. It knows which
@@ -392,6 +393,14 @@ return a new node with default values for everything.
 > insertNode node = rePattern . nodeIndex %= \idx ->
 >     M.insert (node ^. nodeId) node idx
 >
+> redirectLinks :: RegExNode -> RegExNode -> RegExCompiler ()
+> redirectLinks oldNode newNode = do
+>     (oldNode & nodeEdges)
+>
+> removeNode :: RegExNode -> RegExCompiler ()
+> removeNode node = rePattern . nodeIndex %= \idx ->
+>     M.delete (node ^. nodeId) idx
+>
 > addEdge :: RegExEdge -> RegExNode -> RegExCompiler RegExNode
 > addEdge edge fromNode = do
 >     insertNode newFrom
@@ -402,13 +411,9 @@ return a new node with default values for everything.
 > addCharEdge c toNode fromNode =
 >     addEdge (ReCharEdge c (toNode ^. nodeId)) fromNode
 >
-> addStarEdge :: RegExNode -> RegExNode -> RegExCompiler RegExNode
-> addStarEdge toNode fromNode =
->     addEdge (ReStarEdge (toNode ^. nodeId)) fromNode
->
-> addNullEdge :: RegExNode -> RegExNode -> RegExCompiler RegExNode
-> addNullEdge toNode fromNode =
->     addEdge (ReNullEdge (toNode ^. nodeId)) fromNode
+> addWildEdge :: RegExNode -> RegExNode -> RegExCompiler RegExNode
+> addWildEdge toNode fromNode =
+>     addEdge (ReWildEdge (toNode ^. nodeId)) fromNode
 >
 > setStop :: RegExNode -> RegExCompiler RegExNode
 > setStop node = do
@@ -472,8 +477,11 @@ Finally, `ReOpt`
 
 > compileRegEx parent (ReOpt a) =  do
 >     mid <- compileRegEx parent a
->     mapM_ (addStarEdge parent) mid
+>     mapM_ (addWildEdge parent) mid
 >     mapM refreshNode mid
+
+This takes care of compiling the regular expression. Now let's move on to the
+exciting part: matching it against an input string.
 
 Matching
 --------
